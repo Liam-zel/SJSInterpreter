@@ -1,4 +1,4 @@
-const { readFileSync, copyFile, copyFileSync, read } = require('fs')
+const { readFileSync } = require('fs')
 
 /**
  * Shitty JavaScript (sjs) Interpreter class
