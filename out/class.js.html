@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: class.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: class.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>const { readFileSync } = require('fs')
+
+/**
+ * Shitty JavaScript (sjs) Interpreter class
+ */
+class _Interpreter {   
+
+    /**
+     * @param {File} filepath the filepath of the file
+     */
+    constructor(filepath) {
+        this.program = this.getProgram(filepath)
+
+        this.variables = new Map()
+
+        this.primitives   = ["num", "str"]
+        this.math         = ["add", "sub", "mul", "div"]
+        this.operations   = ["com", "fnc", "lop"]
+        this.logic        = ["equ", "neq", "lst", "grt", "lte", "gte"]
+        this.comment      =  "*"
+    }
+
+    /**
+     * @param {File} filepath the filepath of the file
+     */
+    getProgram(filepath) {
+        return readFileSync(filepath, 'utf-8')
+    }
+
+    runProgram() {
+        const lineArr = this.programCast()
+        lineArr.forEach(line => {
+            this.interpretLine(line)
+        })
+    }
+
+    /**
+     * 
+     * @returns Array of individual lines filtering out whitespace and comments
+     */
+    programCast() {
+        // split each line into a seperate string in an array, 
+        // the ? means the array will be empty if input is undefined, maybe
+        let lineValues = this.program?.split("\n")
+
+        // remove comments
+        for (let i = 0; i &lt; lineValues.length; i++) {
+            let line = lineValues[i]
+            let index = line.indexOf(this.comment) > -1? line.indexOf(this.comment) : line.length
+            let x = line.slice(0, index)
+            
+            lineValues[i] = x
+        }
+
+        // remove whitespace
+        lineValues = lineValues.filter(line => line.trim().length > 0)
+
+        return lineValues
+    }
+
+    /**
+     * This function recieves a string,turns it into 
+     * an array and interprets it into Javascript code.   
+     * @param {String} section 
+     * @returns {Number} math result if necessary
+     */
+    interpretLine(section) {
+        // splits section into each phrase 
+        let phrases = section.split(" ") 
+
+        // complete instructions in brackets first with recursion
+        for (let i = 0; i &lt; phrases.length; i++) {
+            let phrase = phrases[i]
+
+            // if a bracket is found, trim outside areas and complete instruction
+            // this is done recursively downards until it reaches the final bracket
+            // and substitutes its answers from its previous place
+            if (phrase.startsWith('(')) {
+                let newSection = phrases.slice(i) // get starting bounds from bracket
+                newSection = newSection.join(' ')
+                newSection = newSection.slice(0, newSection.lastIndexOf(')')) // remove everything past the last bracket
+
+                // substitute phrases[i] for result of this new section
+                phrases[i] = this.interpretLine(newSection.slice(1))
+                
+                // clean up by removing leftovers
+                let removeFinishedBrackets = phrases.splice(0, i+1)
+                removeFinishedBrackets = removeFinishedBrackets.concat(phrases.splice(i+1, 1))
+
+                phrases = removeFinishedBrackets
+            }
+
+        }
+
+        const instruction = phrases[0]
+        let result = 9999999999999999 // lol, its easy to debug
+        // create variable
+        if (this.primitives.includes(instruction)) {
+            let name = phrases[1]
+            // by default it is treated as string, otherwise turn it into a number
+            let value = (instruction == "str")? phrases[3] : parseFloat(phrases[3])
+
+            this.createVariable(name, value)
+        }
+        // solve math
+        else if (this.math.includes(instruction)) {
+            let value1 = phrases[1]
+            let value2 = phrases[2]
+
+            result = this.solveMath(instruction, value1, value2)
+        }
+        // create operation
+        else if (this.operations.includes(instruction)) {
+            this.createOperation(instruction)
+        }
+
+        return result
+    }
+
+    /**
+     * A function that adds a new variable to the _Interpreter object
+     * @param {String} name name of variable
+     * @param {*} value string or number value of variable
+     */
+    createVariable(name, value) {
+        this.variables.set(name, value)
+    }
+
+    /**
+     * 
+     * @param {String} instruction 3 letter instruction e.g "add" or "mul"
+     * @param {number} value1 first value
+     * @param {number} value2 second value
+     * @returns {number} result of math operation
+     */
+    solveMath(instruction, value1, value2) {
+        let ref
+        if (this.variables.get(value1)) {
+            ref = value1
+            value1 = this.variables.get(value1)
+        }
+        // has to be done seperately because parseFloat(0) has less priority over undefined lol
+        if (this.variables.get(value2)) {
+            value2 = this.variables.get(value2)
+        }
+
+        value1 = parseFloat(value1)
+        value2 = parseFloat(value2)
+
+        let result = 0
+        switch (instruction) {
+            case "add":
+                result = value1 + value2
+                break;
+            case "sub":
+                result = value1 - value2
+                break;
+            case "mul":
+                result = value1 * value2
+                break;
+            case "div":
+                result = value1 / value2
+                break;
+        }
+
+        if (ref) this.variables.set(ref, result)
+
+        return result
+    }
+
+    createOperation(operation) {
+
+    }
+
+    /**
+     * @returns console log of stored _Interpreter variables
+     */
+    printVariables() {
+        return console.log(this.variables)
+    }
+}
+
+module.exports = {_Interpreter}
+
+
+
+// function multiplyThree(x) {
+//     return function (y) {
+//         return function (z) {
+//             return x*y*z
+//         }
+//     }
+// }
+
+// console.log(multiplyThree(2)(3)(4))</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="-_Interpreter.html">_Interpreter</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.0</a> on Tue Dec 20 2022 03:50:55 GMT+1100 (Australian Eastern Daylight Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
