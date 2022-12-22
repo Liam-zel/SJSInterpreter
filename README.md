@@ -1,5 +1,5 @@
 # SJSInterpreter
-The shitty interpreter for the Shitty javascript language! A language that is unlike javascript at all!
+The shitty interpreter for the Shitty javascript language! A language that isn't javascript at all!
 
 ### __Master__
 Has all files originally worked with
