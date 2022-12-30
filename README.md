@@ -1,4 +1,4 @@
-![SJS Icon baby](SJS.png)
+![SJS Icon baby](sjs.png)
 
 # SJSInterpreter
 
