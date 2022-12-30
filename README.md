@@ -13,4 +13,7 @@ To install:
 
 ### __Tutorial & Examples__
 
-There is a tutorial file and example scripts found in the **SJS programs** folder
+There is a tutorial file and example scripts found in the **SJS programs** folder such as:
+> * tutorial.sjs
+> * fizzvuzz.sjs
+> * bouncing ball.sjs
