@@ -15,5 +15,5 @@ To install:
 
 There is a tutorial file and example scripts found in the **SJS programs** folder such as:
 > * tutorial.sjs
-> * fizzvuzz.sjs
+> * fizzbuzz.sjs
 > * bouncing ball.sjs
