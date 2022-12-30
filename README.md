@@ -1,4 +1,4 @@
-![SJS Icon baby](sjs.png)
+<img src="sjs.jpg" alt="sjs icon" width="350" height"200"/>
 
 # SJSInterpreter
 
