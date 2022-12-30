@@ -1,7 +1,6 @@
 # SJSInterpreter
 The shitty interpreter for the Shitty javascript language! A language that isn't javascript at all!
 
-
 ## __Install__
 To install:
     1. Essential files are __Interpeter/class.js__ and __Interpreter/complexMath.js__
