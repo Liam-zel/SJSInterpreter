@@ -1,4 +1,4 @@
-<img src="sjs.jpg" alt="sjs icon" width="350" height"200"/>
+<img src="sjs.jpg" alt="sjs icon" width="350"/>
 
 # SJSInterpreter
 
