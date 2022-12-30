@@ -1,3 +1,5 @@
+![SJS Icon baby](SJS.png)
+
 # SJSInterpreter
 
 The shitty interpreter for the Shitty javascript language! A language that isn't javascript at all!
