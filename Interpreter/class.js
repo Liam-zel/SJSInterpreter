@@ -205,8 +205,6 @@ export class _Interpreter {
     interpretLine(line) {
         line = this.completeBrackets(line)
 
-        console.log(line)
-
         // splits line into sections
         let lineArr = line.split(" ") 
 
