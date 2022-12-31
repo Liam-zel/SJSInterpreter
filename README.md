@@ -6,7 +6,7 @@ The shitty interpreter for the Shitty javascript language! A language that isn't
 
 ## __Install__
 
-To install:
+To install: </br>
     1. Essential files are **Interpeter/class.js** and **Interpreter/complexMath.js** </br>
     2. Create a new file and import the _Interpreter class </br>
     3. Create a variable with the object and pass in the file path </br>
