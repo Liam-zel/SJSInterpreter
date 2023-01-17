@@ -1050,7 +1050,7 @@ export class _Interpreter {
 
         let formatting = style.t_red + '%s ' + style.reset
         return console.log(formatting, "ERROR - " + errorMsg + "\n", errorObj, "\n")
-    }2
+    }
 
 
     /**
