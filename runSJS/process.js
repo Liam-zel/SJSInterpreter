@@ -1,8 +1,7 @@
-import { _Interpreter } from './class.js'
+import { _Interpreter } from '../Interpreter/class.js'
 
 const I = new _Interpreter("SJS programs/tutorial.sjs", 0)
 I.runProgram()
-// I.printVariables()
 
 /**
  * TODO:

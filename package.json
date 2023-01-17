@@ -2,9 +2,10 @@
   "name": "programming-languages",
   "version": "1.0.0",
   "description": "",
-  "main": "Interpreter/process.js",
+  "main": "runSJS/process.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "debug": "node runSJS/debugFiles.js"
   },
   "keywords": [],
   "author": "",

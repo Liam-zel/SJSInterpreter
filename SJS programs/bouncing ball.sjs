@@ -24,7 +24,7 @@ lop (num i = 1, (grt i 0), (add i 0)) {
     com (gte y height) {
         mul yVel -1
     }
-        com (lte y 0) {
+    com (lte y 0) {
         mul yVel -1
     }
 
