@@ -5,7 +5,6 @@
 The shitty interpreter for the Shitty javascript language! A language that isn't javascript at all!
 
 ## __Install__
-
 To install:
     1. Essential files are all in **/Interpreter** </br>
     2. Create a new file and import the **_Interpreter** class </br>
