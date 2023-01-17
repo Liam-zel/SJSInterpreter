@@ -769,7 +769,8 @@ export class _Interpreter {
     print(args) {
         args = this.insertVariablesInString(args)
 
-        let formatting = style.t_cyan + '%s' + this.backgroundStyling + this.textStyling
+        // I have no clue why formatting has to be like this but it just breaks otherwise :(
+        let formatting = style.t_cyan + '%s' + this.backgroundStyling + this.textStyling + this.backgroundStyling 
         if (this.isBold) formatting += style.bold
         formatting += '%s' + style.reset
 
