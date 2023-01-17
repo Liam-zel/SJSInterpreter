@@ -150,7 +150,8 @@ export class _Interpreter {
         for (let i = lineValues.length-1; i >= 0; i--) {
             // add labels to breaks
             if (lineValues[i].startsWith('brk')) {
-                lineValues[i] += " " + this.scopeFlag + (depth-1)
+                let breakDepth = (depth > 0)? depth-1 : 0 // if depth is 0 it would be -1, couldve found a better solution tbh
+                lineValues[i] += " " + this.scopeFlag + breakDepth
             }
 
             let line = lineValues[i]
