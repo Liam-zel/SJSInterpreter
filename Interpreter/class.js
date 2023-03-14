@@ -20,14 +20,17 @@ export class _Interpreter {
     constructor(filepath, tickRate) {
         this.program = this.getProgram(filepath)
 
-        // script variables
+        // script variables & arrays
         this.variables = new Map()
+        this.arrays = new Map()
 
         this.primitives   = ["num", "str"]
+        this.arrayTag     = ["arr"]
         this.math         = ["add", "sub", "mul", "div", "mod", "pow"]
         this.eMath        = ["rnd", "flr", "cel", "ran", "abs"] 
         this.operations   = ["com", "prn", "brk", "con", "clr", "tic", 
-                             "ext", "style", "run", "time"] 
+                             "ext", "style", "run", "mov", "len", "del", 
+                             "time"] 
         this.logic        = ["equ", "neq", "lst", "grt", "lte", "gte", "not", "or", "and"]
         this.comment      =  "*"
         this.loops        = ["lop", "for", "rep", "whl"]
@@ -43,6 +46,7 @@ export class _Interpreter {
 
         // Map to store label of active benchmarkers
         this.benchmarkers = new Map()
+
 
         // console colours which can be set
         this.textStyling = style.reset
@@ -62,12 +66,16 @@ export class _Interpreter {
             this.constants.set("NEWSEGMENT", "\n\n\n\n")
             this.constants.set("SPACE", "\u0020")
             this.constants.set("NULL", 0)
+            this.constants.set("JSNULL", null)
+            this.constants.set("NAN", NaN)
             this.constants.set("UNDEFINED", undefined)
 
         this.scopeStart   = "{"
         this.scopeEnd     = "}"
         this.scopeFlag    = "@@"
         this.scopeDepth   = 0
+
+        // this.arrIndexFlag = ":"
 
         this.readStart    = "["
         this.readEnd      = "]"
@@ -150,8 +158,7 @@ export class _Interpreter {
         for (let i = lineValues.length-1; i >= 0; i--) {
             // add labels to breaks
             if (lineValues[i].startsWith('brk')) {
-                let breakDepth = (depth > 0)? depth-1 : 0 // if depth is 0 it would be -1, couldve found a better solution tbh
-                lineValues[i] += " " + this.scopeFlag + breakDepth
+                lineValues[i] += " " + this.scopeFlag + (depth-1)
             }
 
             let line = lineValues[i]
@@ -227,6 +234,13 @@ export class _Interpreter {
             let line = lineValues[i].split(" ")
             if (!this.funcName.includes(line[0])) {
                 continue // first time ive EVER used continue, but I hate nesting
+                // i began to use continue more often lol :)
+            }
+
+            // error handling for not using space (sends function into infinite loop)
+            if (line[1].indexOf(this.scopeStart) !== -1) {
+                line[2] = this.scopeStart + line[1].split(this.scopeStart)[1]
+                line[1] = line[1].split(this.scopeStart)[0]
             }
 
             let label = line[line.length-1].slice(1)
@@ -261,12 +275,14 @@ export class _Interpreter {
 
             // TODO - MAKE VARIABLES NOT BE ABLE TO USE FUNCTION NAMES (or the other way around, whatevers easier)
             let name = line[1]
+
             let funcData = {
                 index: 1,
                 returnValue: undefined
             }
             this.storedFunctions.set(name, funcData)
             this.functionLines += length + 1
+
             i += length
         }
 
@@ -344,11 +360,26 @@ export class _Interpreter {
             let name = lineArr[1]
 
             let type = instruction
+            // remove whitespace from numbers
+            if (type == "num") {
+                lineArr = lineArr.filter(x => x != '') // allows for spacing in variables
+            }
+
             let value //= (instruction === "str")? lineArr.splice(3).join(' ') : lineArr[3]
-            if (instruction === "str") value = lineArr.splice(3).join(' ')
-            if (instruction === "num") value = lineArr[3]
+            if (type === "str") value = lineArr.splice(3).join(' ')
+            if (type === "num") value = lineArr[3] || "0"
+            // if its not a string it tries to do a string.replace on a number stfu 
+            // it turns it into a number after anyways i hope this doesnt create bugs
 
             this.createVariable(type, name, value)
+        }
+
+        // create array
+        if (this.arrayTag.includes(instruction)) {
+            let name = lineArr[1]
+            let value = line.split("=")[1] // string e.g a, b, c instead of ['a,', 'b,', 'c']
+
+            this.createArray(name, value)
         }
 
         // do math
@@ -375,9 +406,15 @@ export class _Interpreter {
             
             args = this.readVariables(args)
             let ref = false
-            if (this.variables.get(args) !== undefined) {
+            if (this.variables.has(args)) {
                 ref = args
                 args = this.variables.get(args)
+            }
+            // array support
+            let indexes = this.getArrayIndexes(args) 
+            if (indexes[0] !== undefined) {
+                args = args.slice(0, args.indexOf(":"))
+                args = this.getArrayAtIndex(args, indexes)
             }
 
             returnVal = this.performEMath(instruction, args, ref)
@@ -489,7 +526,7 @@ export class _Interpreter {
             }
             return this.error("Can't initialise variable with reserved keyword, please rename", errObj) 
         }
-        if (this.storedFunctions.get(name) !== undefined) {
+        if (this.storedFunctions.has(name)) {
             const usedFuncNameErr = {
                 line: this.program[this.currentLine], 
                 name: name,
@@ -501,9 +538,68 @@ export class _Interpreter {
         value = this.insertVariablesInString(value)
         value = this.checkIfStringIsNumber(value)
         
-        if (this.variables.get(value) != undefined) value = this.variables.get(value)
+        // dont think this is necessary
+        // if (this.variables.has(value)) value = this.variables.get(value)
 
         this.variables.set(name, value)
+    }
+
+
+    /**
+     * Stores / creates an array with a name and value in the map _Interpreter.arrays
+     * @param {String} name name logged into array map
+     * @param {String} value string containing the values
+     */
+    createArray(name, value) {
+        // errors
+        if (this.reserved.includes(name)) {
+            const errObj = {
+                line: this.program[this.currentLine], 
+                name: name,
+                value: value
+            }
+            return this.error("Can't initialise array with reserved keyword, please rename", errObj) 
+        }
+        if (this.storedFunctions.has(name)) {
+            const usedFuncNameErr = {
+                line: this.program[this.currentLine], 
+                name: name,
+                values: value
+            }
+            return this.error("Can't intialise array with already declared function name! Please either rename the function or variable", usedFuncNameErr)
+        }
+        if (value == undefined || value == "") {
+            const noValuesErr = {
+                line: this.program[this.currentLine], 
+                name: name,
+                values: value
+            }
+            return this.error("Empty array! If you want to create an empty array use [UNDEFINED] or [NULL]", noValuesErr)
+        }
+
+
+        // logic
+        let values = value.split(',')
+
+        for (let i = 0; i < values.length; i++) {
+            let v = values[i].trim()
+            // v without []
+            let vNoRead = v.slice(1, v.length-1)
+
+            if (this.arrays.has(vNoRead)) {
+                v = this.arrays.get(vNoRead)
+            }
+            else {
+                v = this.insertVariablesInString(v)
+                v = this.checkIfStringIsNumber(v)
+    
+                if (this.variables.has(v)) value = this.variables.get(v)
+            }
+
+            values[i] = v
+        }
+
+        this.arrays.set(name, values)
     }
 
 
@@ -515,6 +611,7 @@ export class _Interpreter {
      * @returns Result of math operation and updates value1 if reference is given
      */
     solveMath(instruction, value1, value2) {
+        let preVariables = [value1, value2]
         // square brackets mean read memory only, set flag to not update their value
         let readOnly = false
         if (value1.startsWith(this.readStart) && value1.endsWith(this.readEnd)) {
@@ -523,13 +620,28 @@ export class _Interpreter {
         }
 
         // get reference so value can be updated after and replace reference with value
+        // variables
         let reference
-        if (this.variables.get(value1) != undefined) {
+        if (this.variables.has(value1)) {
             reference = value1
             value1 = this.variables.get(value1)
         }
-        if (this.variables.get(value2) != undefined) {
+        if (this.variables.has(value2)) {
             value2 = this.variables.get(value2)
+        }  
+        let arrName1 = (typeof value1 == 'string') ? value1.split(":")[0] : undefined
+        let arrName2 = (typeof value2 == 'string') ? value2.split(":")[0] : undefined
+        let valIndex = undefined
+
+        if (this.arrays.has(arrName1)) {
+            reference = arrName1
+
+            valIndex = this.getArrayIndexes(value1)
+            value1 = this.getArrayAtIndex(value1, valIndex)
+        }
+        if (this.arrays.has(arrName2)) {
+            let val2Index = this.getArrayIndexes(value2)
+            value2 = this.getArrayAtIndex(value2, val2Index)
         }  
 
         value1 = parseFloat(value1)
@@ -539,8 +651,9 @@ export class _Interpreter {
         const nanErrObj = {
             line: this.program[this.currentLine], 
             instruction: instruction, 
-            val1: value1,
-            val2: value2
+            aVal1: value1,
+            Val2: value2,
+            givenValues: preVariables
         }
         if (isNaN(value1)) return this.error("val1 is NaN", nanErrObj)
         if (isNaN(value2)) return this.error("val2 is NaN", nanErrObj)
@@ -568,7 +681,30 @@ export class _Interpreter {
         }
 
         // update variable
-        if (reference && !readOnly) this.variables.set(reference, result) 
+        if (reference && !readOnly) {
+            if (this.variables.has(reference)) this.variables.set(reference, result) 
+
+            if (this.arrays.has(reference)) {
+                let steps = []
+                
+                let arrTemp = this.arrays.get(reference)
+                valIndex.forEach(i => {
+                    steps.push(arrTemp)
+                    arrTemp = arrTemp[i]
+                })
+                steps.push(result)
+
+                for (let i = steps.length-2; i >= 0; i--) {
+                    let index = valIndex[i]
+                    steps[i][index] = result
+                    result = steps[i]
+                }
+
+                arrTemp = steps[0]
+
+                this.arrays.set(reference, arrTemp) 
+            }
+        }
 
         return result
     }
@@ -582,6 +718,15 @@ export class _Interpreter {
      * @returns {Number} Returns number output
      */
     performEMath(instruction, val, ref) {
+        if (val == undefined) {
+            const undefinedValErr = {
+                line: this.program[this.currentLine],
+                instruction: instruction,
+                value: val
+            }
+            return this.error('Given undefined value!', undefinedValErr)
+        }
+
         switch(instruction) {
             case "flr": //  floor
                 if (ref) this.variables.set(ref, floor(val))
@@ -604,6 +749,7 @@ export class _Interpreter {
 
 
     /**
+     * Completes comparisons
      * @param {String} comparison logic comparison to make between input 1 and 2
      * @param {*} input1 string, number or variable reference
      * @param {*} input2 string, number or variable reference
@@ -611,8 +757,25 @@ export class _Interpreter {
      */
     resolveLogic(comparison, input1, input2) {
         // if references, grab variable values
-        if (this.variables.get(input1) != undefined) input1 = this.variables.get(input1)
-        if (this.variables.get(input2) != undefined) input2 = this.variables.get(input2)
+        let isVariable = [false, false]
+        if (this.variables.has(input1)) input1 = this.variables.get(input1); isVariable[0] = true
+        if (this.variables.has(input2)) input2 = this.variables.get(input2); isVariable[1] = true
+
+        // arrays
+        if (!isVariable[0]) {
+            let indexes1 = this.getArrayIndexes(input1)
+            if (indexes1[0] !== undefined) {
+                input1 = input1.slice(0, input1.indexOf(":"))
+                input1 = this.getArrayAtIndex(input1, indexes1)
+            }
+        }
+        if (!isVariable[1]) {
+            let indexes2 = this.getArrayIndexes(input2)
+            if (indexes2[0] !== undefined) {
+                input2 = input2.slice(0, input2.indexOf(":"))
+                input2 = this.getArrayAtIndex(input2, indexes2)
+            }
+        }
 
         switch (comparison) {
             case "equ": //equal
@@ -671,6 +834,15 @@ export class _Interpreter {
                 break; 
             case "run": // run functions
                 returnVal = this.runFunction(args) 
+                break;
+            case "len": // get length of strings and arrays
+                returnVal = this.arrayLength(args)
+                break;
+            case "mov": // add to arrays
+                returnVal = this.moveIntoArray(args)
+                break;
+            case "del": // delete variables or array values
+                returnVal = this.delete(args)
                 break;
             case "time": // Creates / updates benchmark
                 returnVal = this.updateBenchmark(args) 
@@ -747,7 +919,7 @@ export class _Interpreter {
         // check to see if first argument is a variable that needs to be overwritten
         let origin = args[0]
         let reference = false
-        if (this.variables.get(origin) !== undefined) {
+        if (this.variables.has(origin)) {
             reference = origin
             args[0] = this.variables.get(reference)
         }
@@ -769,8 +941,7 @@ export class _Interpreter {
     print(args) {
         args = this.insertVariablesInString(args)
 
-        // I have no clue why formatting has to be like this but it just breaks otherwise :(
-        let formatting = style.t_cyan + '%s' + this.backgroundStyling + this.textStyling + this.backgroundStyling 
+        let formatting = style.t_cyan + '%s' + this.backgroundStyling + this.textStyling
         if (this.isBold) formatting += style.bold
         formatting += '%s' + style.reset
 
@@ -859,6 +1030,14 @@ export class _Interpreter {
 
         // get function object which has location and return value
         let func = this.storedFunctions.get(functionName)
+        if (func === undefined) {
+            const noFunctionErr = {
+                line: this.program[this.currentLine], 
+                function: functionName,
+                storedFunctions: this.storedFunctions
+            }
+            return this.error("You tried to call a function that does not exist! Function names are case sensitive, or maybe there's a typo.", noFunctionErr)
+        }
         this.currentLine = func.index - 1
         
         // run function in a sandbox to get return value (note, this doesn't account for tickrates!)
@@ -876,6 +1055,193 @@ export class _Interpreter {
         }
         
         return func.returnValue
+    }
+
+
+    /**
+     * Gets the length of a string or array, can be passed variables
+     * @param {String} args A string or array/variable name 
+     * @returns 
+     */
+    arrayLength(args) {
+        let x = (args.indexOf(":") !== -1) ? args.slice(0, args.indexOf(":")) : args
+
+        // assumption for arrays, when arrays are chained with brackets
+        // they are returned as strings
+        if (x.split(",").length > 1) x = x.split(",")
+
+        if (this.arrays.has(x)) {
+            let indexes = this.getArrayIndexes(args)
+            let arr = this.getArrayAtIndex(x, indexes)
+            x = arr
+            // if not an array, turn it into a string to get length
+            if (typeof x !== 'object') x = x.toString()
+        }
+        if (this.variables.has(x)) {
+            x = this.variables.get(x)
+        }
+
+        return x.length
+    }
+
+
+    /**
+     * Inserts a given value into an array at a given index, or appends to the end
+     * of the array
+     * @param {String} args given input, starting with array name, possible index, and value
+     */
+    moveIntoArray(args) {
+        let arrName = args.split(" ")[0]
+        if (arrName.indexOf(":") !== -1) arrName = arrName.split(":")[0]
+
+        let readOnly = false
+        if (arrName.startsWith(this.readStart)) {
+            readOnly = true
+            arrName = arrName.slice(1)
+        }
+
+        // whats being moved into the array
+        let items = args.split(" ").splice(1)
+
+        // get given indexes
+        let indexes = args.split(":").splice(1)
+        for (let i = 0; i < indexes.length; i++) {
+            indexes[i] = indexes[i].split(" ")[0]
+            // for when an array is being read and its at the last index e.g (prn [arr:i]) will give 'i]' as an index
+            if (indexes[i].endsWith(this.readEnd)) indexes[i] = indexes[i].slice(0, indexes[i].length-1)
+            
+            if (this.variables.has(indexes[i])) indexes[i] = this.variables.get(indexes[i])
+            indexes[i] = parseInt(indexes[i])
+        }
+
+        // read variable and array inputs
+        for (let i = 0; i < items.length; i++) {
+            let removedBrackets = items[i].slice(1, items[i].length-1)
+            if (this.variables.get(removedBrackets)) items[i] = this.variables.get(removedBrackets)
+            if (this.arrays.get(removedBrackets)) items[i] = this.arrays.get(removedBrackets)
+        }
+
+        // array errors (array not found)
+        if (!this.arrays.has(arrName)) {
+            const noArrErr = {
+                line: this.program[this.currentLine],
+                input: args,
+                arrayName: arrName,
+                indexes: indexes,
+                values: items,
+                loadedArrays: this.arrays
+            }
+            return this.error("Array couldn't be found", noArrErr)
+        }
+
+        // out of bounds
+        const outOfBounds = () => {
+            const noArrErr = {
+                line: this.program[this.currentLine],
+                input: args,
+                arrayName: arrName,
+                index: indexes,
+                values: items,
+                // loadedArrays: this.arrays
+            }
+            return this.error("Array index out of bounds!", noArrErr)
+        }
+
+
+        // add into array
+        let array = this.arrays.get(arrName)
+
+        for (let i = 0; i < indexes.length-1; i++) {
+            // errors
+            if (array[indexes[i]] === undefined) {
+                return outOfBounds()
+            }
+            array = array[indexes[i]]
+        }
+
+        // get last index
+        let insertIndex = indexes[indexes.length-1]
+        if (indexes.length == 0) insertIndex = this.arrayLength(arrName)
+
+        // edit array if not read only
+        if (!readOnly) {
+            for (let i = 0; i < items.length; i++) {
+                // inserts item at index
+                array.splice(insertIndex, 0, items[i])
+            }
+            return array
+        }
+
+        // copy array
+        let arrCopy = []
+        array.forEach(e => {
+            arrCopy.push(e)
+        })
+
+        for (let i = 0; i < items.length; i++) {
+            // errors
+            if (array[insertIndex] === undefined) {
+                return outOfBounds()
+            }
+            // inserts item at index
+            arrCopy.splice(insertIndex, 0, items[i])
+        }
+
+        return arrCopy
+    }
+
+
+    /**
+     * Deletes variables, arrays, or array elements from within interpreter storage
+     * @param {String} args The given item you want to delete, variable name, array name, or array with index
+     * @returns 
+     */
+    delete(args) {
+        // delete variables
+        if (this.variables.has(args)) {
+            return this.variables.delete(args)
+        }
+
+        // delete arrays
+        let indexes, name
+        if (args.indexOf(":") !== -1) {
+            indexes = args.split(":").slice(1)
+            for (let i = 0; i < indexes.length; i++) {
+                if (this.variables.has(indexes[i])) indexes[i] = this.variables.get(indexes[i])
+                indexes[i] = parseInt(indexes[i])
+            }
+    
+            name = args.split(":")[0]
+        }
+        else {
+            name = args
+        }
+
+        // read only
+        let readOnly = false
+        if (name.startsWith(this.readStart)) {
+            readOnly = true
+            name = name.slice(1) // remove read start
+        }
+        
+        if (this.arrays.has(name)) {
+            if (readOnly && index !== undefined) {
+                // copy array
+                let x = []
+                this.arrays.get(name).forEach(v => {
+                    x.push(v)
+                })
+                return x.splice(index, 1)
+            }
+            if (indexes !== undefined) {
+                let arr = this.arrays.get(name)
+                for (let i = 0; i < indexes.length-1; i++) {
+                    arr = arr[indexes[i]]
+                }
+                return arr.splice(indexes[indexes.length-1], 1)
+            }
+            else return this.arrays.delete(name)
+        }
     }
 
 
@@ -940,8 +1306,9 @@ export class _Interpreter {
             // add variables to string with [x]
             if (arg.startsWith(this.readStart) && arg.endsWith(this.readEnd)) {
                 arg = arg.slice(1, arg.length-1)
-                if (this.variables.get(arg) != undefined) x += this.variables.get(arg) + " "
-                if (this.constants.get(arg) != undefined) x += this.constants.get(arg) + " "
+                if (this.variables.has(arg)) x += this.variables.get(arg) + " "
+                if (this.constants.has(arg)) x += this.constants.get(arg) + " "
+                // -arrays- array support, use this function more
             }
             // else just add to string
             else x += arg + " "
@@ -961,18 +1328,29 @@ export class _Interpreter {
 
 
     /**
-     * 
+     * Searches string for arrays, variables and constants, then replaces them.
+     * This string could be given as a value for a print instruction, a math operation
+     * or even an error message.
+     * Any variables, constants or arrays surrounded by [ and ] will be replaced
      * @param {String} string string input which will be matched against existing variables and constants
      * @returns Given string parameter after replacing variables / constants
      */
     insertVariablesInString(string) {
-        let rs = this.readStart
-        let re = this.readEnd
+        if (string == undefined) {
+            const undefinedStringErr = {
+                line: this.program[this.currentLine],
+                string: string
+            }
+            return this.error("An undefined value was given!", undefinedStringErr)
+        }
+
+        const rs = this.readStart
+        const re = this.readEnd
 
         // constants
         for (let constant of this.constants.keys()) {
             // the while loop checks to see if the string would change 
-            // if another replace was done, 
+            // if another replace was done,  
             // this makes sure that prn [x] [x], replaces ALL [x] and not just the first one
             while (string !== string.replace(rs + constant + re, this.constants.get(constant))) {
                 string = string.replace(rs + constant + re, this.constants.get(constant))
@@ -988,7 +1366,92 @@ export class _Interpreter {
             }
         }
 
+        // arrays
+        for (let arr of this.arrays.keys()) {
+            while (string.indexOf(rs + arr) !== -1) {  
+                // get array by splicing between 'arrayName and ]', 
+                // make sure to only check for ']' after the index of the array name 
+                // or previous ']' will return an empty string
+                let arrName = string.slice(string.indexOf(arr), string.indexOf(re, string.indexOf(arr)))
+
+                // initialize result and string that stores possible indexes
+                let result, indexString = ""
+
+                let indexes = this.getArrayIndexes(arrName)
+                if (indexes[0] != undefined) {
+                    // gets indexes from string
+                    indexString = arrName.slice(arrName.indexOf(":"))
+
+                    arrName = arrName.slice(0, arrName.indexOf(":"))
+                    result = this.getArrayAtIndex(arrName, indexes)
+                    // amazing
+                    if (result !== undefined) result = result.toString()
+                }
+                else {
+                    result = this.arrays.get(arrName).toString()
+                }
+
+                string = string.replace(rs + arrName + indexString + re, result)
+
+                // recursively solve
+                string = this.insertVariablesInString(string)
+            }
+        }
+
         return string
+    }
+
+
+    /**
+     * Returns an array of indexes
+     * @param {String} arr Array name with indexes involved
+     * @returns 
+     */
+    getArrayIndexes(arr) {
+        if (typeof arr !== 'string') return arr
+        let indexes = arr.split(":").slice(1)   
+        for (let i = 0; i < indexes.length; i++) {
+            if (this.variables.has(indexes[i])) indexes[i] = this.variables.get(indexes[i])
+            indexes[i] = parseInt(indexes[i])
+        }
+        
+        return indexes
+    }
+
+
+    /**
+     * 
+     * @param {string} arr Array value with name
+     * @param {array} indexes Array of indexes used to move through array
+     * @returns 
+     */
+    getArrayAtIndex(arr, indexes) {
+        let name
+
+        if (arr.indexOf(":") !== -1) name = arr.split(":")[0]
+        else name = arr
+
+        if (name.startsWith(this.readStart)) name = name.slice(1)
+        if (name.endsWith(this.readEnd)) name = name.slice(0, name.length-1)
+
+        arr = this.arrays.get(name)
+        let arrTemp = arr
+
+        indexes.forEach(i => {
+            arr = arr[i]
+
+            if (arr === undefined) {
+                const arrOutOfBoundsErr = {
+                    line: this.program[this.currentLine],
+                    array: name,
+                    arrayValues: arrTemp,
+                    indexes: indexes
+                }
+                return this.error('Array index out of bounds!', arrOutOfBoundsErr)
+            }
+        })
+
+        return arr
     }
 
 
@@ -998,6 +1461,7 @@ export class _Interpreter {
      * @returns 
      */
     checkIfStringIsNumber(val) {
+        if (typeof val == 'number' || typeof val == 'undefined') return val
         if (parseFloat(val).toString().length === val.length && !isNaN(parseFloat(val))) {
             return parseFloat(val)
         }
@@ -1035,6 +1499,7 @@ export class _Interpreter {
     printVariables() {
         let formatting = style.t_cyan + '%s' + style.reset
         console.log(formatting, "\n\nvar: ", this.variables)
+        console.log(formatting, "\narrays: ", this.arrays)
         console.log(formatting, "\nfunctions: ", this.storedFunctions)
         console.log(formatting, "\nbenchmarkers: ", this.benchmarkers)
     }
