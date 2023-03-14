@@ -4,7 +4,6 @@ str drop = ⟍
 
 num scale = 3
 
-* example of mountain generation
 *     _
 *   _/ \      _/\__/\_
 *__/    \_/\_/        \
@@ -112,8 +111,8 @@ lop (num i = 0, (lst i 40), (add i 1)) {
       }
    }
 
-   num prevY = currentY
-   num currentY = nextY
+   num prevY = [currentY]
+   num currentY = [nextY]
    num nextY = (flr (mul (ran) scale))
 }
 
